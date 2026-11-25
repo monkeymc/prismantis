@@ -472,11 +472,13 @@ const runHelper = async ($: EngineInterface, backend: ClipboardBackend, build: (
   return result.exitCode === 0 ? null : result.stderr.trim() || command.failure
 }
 
+type Rich = (() => string) | 'png' | 'chafa' | 'run'
+
 const richCommand = (style: Style, backend: ClipboardBackend, content: string, rich: (() => string) | 'png', hues?: Hues) => (systemRoot?: string): HelperCommand => rich === 'png'
   ? imageCommand(backend, content, artColors(style), systemRoot, hues)
   : clipboardCommand(backend, rich(), content, systemRoot)
 
-const offers = (style: Style, rich?: (() => string) | 'png'): boolean => !rich || (rich === 'png' ? drawsImages(style.htmlCopy) : !!style.htmlCopy)
+const offers = (style: Style, rich?: Rich): boolean => !rich || (rich === 'chafa' || rich === 'run' ? style.htmlCopy === 'macos' : rich === 'png' ? drawsImages(style.htmlCopy) : !!style.htmlCopy)
 
 const folder = ($: EngineInterface, el: ReturnType<EngineInterface['ui']['resolve']>, open?: string[], faces = false, startOpen = false): Fold => (id, hidden, key, look) => {
   if (!open) return null
@@ -499,7 +501,36 @@ const lastCopy = (run: () => Promise<string>): Promise<string | null> => {
   return done
 }
 
-const copyNow = async ($: EngineInterface, style: Style, content: string, surface: RenderSurface, rich?: (() => string) | 'png', hues?: Hues): Promise<string> => {
+const sendToChafa = async ($: EngineInterface, style: Style, content: string, hues?: Hues): Promise<string> => {
+  const dir = `${((await $.env.get('TMPDIR')) || '/tmp').replace(/\/+$/, '')}/prismantis-chafa`
+  const made = await $.process.run(['mkdir', '-p', dir]).catch(() => null)
+  if (made?.exitCode !== 0) return `chafa: cannot make ${dir}`
+  const at = await $.clock.now()
+  const path = `${dir}/${at}.png`
+  const failure = await runHelper($, 'macos', () => imageCommand('macos', content, artColors(style), undefined, hues, path))
+  if (failure !== null) return `chafa: ${failure}`
+  return openSplit($, `chafa '${path.replace(/'/g, `'\\''`)}'`)
+}
+
+const openSplit = async ($: EngineInterface, text: string): Promise<string> => {
+  if ((await $.env.get('TERM_PROGRAM')) !== 'ghostty') return 'chafa split needs Ghostty'
+  const split = await $.process.run([
+    '/usr/bin/osascript',
+    '-e', 'on run argv',
+    '-e', 'tell application "Ghostty"',
+    '-e', 'set cfg to new surface configuration',
+    '-e', 'set initial input of cfg to (item 1 of argv) & linefeed',
+    '-e', 'split (focused terminal of selected tab of front window) direction right with configuration cfg',
+    '-e', 'end tell',
+    '-e', 'end run',
+    text,
+  ]).catch((err: unknown) => ({ exitCode: 1, stderr: String(err) }))
+  return split.exitCode === 0 ? 'Opened chafa split' : `chafa split failed: ${split.stderr.trim()}`
+}
+
+const copyNow = async ($: EngineInterface, style: Style, content: string, surface: RenderSurface, rich?: Rich, hues?: Hues): Promise<string> => {
+  if (rich === 'chafa') return sendToChafa($, style, content, hues)
+  if (rich === 'run') return openSplit($, content)
   const backend = style.htmlCopy
   const failure = rich && backend ? await runHelper($, backend, richCommand(style, backend, content, rich, hues)) : undefined
   if (failure === null) return rich === 'png' ? 'Copied as image' : 'Copied formatted table'
@@ -508,7 +539,7 @@ const copyNow = async ($: EngineInterface, style: Style, content: string, surfac
   return failure ? `Copied as plain text (${failure})` : 'Copied'
 }
 
-const copyButton = ($: EngineInterface, el: ReturnType<EngineInterface['ui']['resolve']>, style: Style) => (text: string | (() => string), key: string, label = '⧉ copy', rich?: (() => string) | 'png', hues?: () => Hues) => {
+const copyButton = ($: EngineInterface, el: ReturnType<EngineInterface['ui']['resolve']>, style: Style) => (text: string | (() => string), key: string, label = '⧉ copy', rich?: Rich, hues?: () => Hues) => {
   const copied = (surface: RenderSurface) => lastCopy(() => copyNow($, style, typeof text === 'function' ? text() : text, surface, rich, hues?.()))
   return style.copyButtons && offers(style, rich) ? (
     <el.Button

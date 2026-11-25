@@ -296,9 +296,12 @@ export const artPicture = (text: string, colors: ArtColors, hues?: Ink[][]): Art
   return { lines, columns: Math.max(0, ...text.split('\n').map(width)), foreground, background }
 }
 
-export const imageCommand = (backend: ClipboardBackend, text: string, colors: ArtColors, systemRoot?: string, hues?: Ink[][]): HelperCommand => {
-  const json = JSON.stringify(artPicture(text, colors, hues))
+export const MAC_IMAGE_SAVE = MAC_IMAGE_COPY.slice(0, MAC_IMAGE_COPY.indexOf('var pasteboard')) +
+  "if (!png || !png.writeToFileAtomically(payload.path, true)) throw new Error('Cannot write image file')\n"
+
+export const imageCommand = (backend: ClipboardBackend, text: string, colors: ArtColors, systemRoot?: string, hues?: Ink[][], path?: string): HelperCommand => {
+  const json = JSON.stringify({ ...artPicture(text, colors, hues), ...(path ? { path } : {}) })
   return backend === 'windows'
     ? { stdin: ascii(json), argv: powershell(systemRoot, WIN_IMAGE_COPY), failure: 'Windows image helper failed' }
-    : { ...osascript(MAC_IMAGE_COPY, json), failure: 'macOS image helper failed' }
+    : { ...osascript(path ? MAC_IMAGE_SAVE : MAC_IMAGE_COPY, json), failure: 'macOS image helper failed' }
 }

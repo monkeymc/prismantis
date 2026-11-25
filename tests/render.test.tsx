@@ -467,9 +467,19 @@ for (const copyButtonStyle of ['dim', 'inline', 'hover'] as const) test(`copyBut
 test('copyButtonStyle hover drops trailing buttons a narrow terminal has no room for, keeping the first', { options: { copyButtonStyle: 'hover' } }, async ($, on) => {
   clipboardEnv(on, 'macos')
   await startSession($, on)
-  for (const [columns, labels] of [[120, '⧉ md ⧉ art ⧉ html ▣ png'], [24, '⧉ md ⧉ art']] as const) {
+  for (const [columns, labels] of [[120, '⧉ md ⧉ art ⧉ html ▣ png ▣ chafa'], [24, '⧉ md ⧉ art']] as const) {
     const ui = await $.ui.mount({ ...draw('| a |\n|---|\n| 1 |'), viewport: { columns, rows: 40 }, surface: 'terminal' })
     expect(reveals((await ui.drawn()) as DrawnNode).map(({ node }) => withParents(node).filter(({ node: n }) => n.type === 'Button').map(({ node: n }) => n.props?.label).join(' '))).toEqual([labels])
+    await ui.unmount()
+  }
+})
+
+test('▣ chafa shows on a code block only for plain chafa lines on a macos terminal', async ($, on) => {
+  clipboardEnv(on, 'macos')
+  await startSession($, on)
+  for (const [code, hasChafa] of [['chafa /tmp/a.png', true], ['chafa -s 80x40 a.png', true], ['chafa x; rm -rf ~', false], ['chafa $(evil)', false], ['echo chafa a.png', false]] as const) {
+    const ui = await $.ui.mount({ ...draw(`\`\`\`bash\n${code}\n\`\`\``), surface: 'terminal' })
+    expect((await ui.findAll({ type: 'Button' })).map(button => button.props.label).includes('▣ chafa')).toBe(hasChafa)
     await ui.unmount()
   }
 })

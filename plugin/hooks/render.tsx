@@ -1485,7 +1485,21 @@ const renderList = (el: ElementTable, style: Style, block: Extract<Block, { kind
   )
 }
 
-export type CopyButton = (text: string | (() => string), key: string, label?: string, rich?: (() => string) | 'png', hues?: () => Hues) => RenderElement | null
+export type CopyButton = (text: string | (() => string), key: string, label?: string, rich?: (() => string) | 'png' | 'chafa' | 'run', hues?: () => Hues) => RenderElement | null
+
+export const chafaLines = (lines: string[]): string[] => lines.map(line => line.trim()).filter(line => /^chafa(\s+[^\s;&|`$()<>\\]+)+$/.test(line))
+
+const chafaRun = (copy: CopyButton | undefined, lines: string[], b: number): RenderElement[] => {
+  const runs = chafaLines(lines)
+  const run = runs.length && copy ? copy(runs.join('\n'), `run${b}`, '▣ chafa', 'run') : null
+  return run ? [run] : []
+}
+
+const withRuns = (el: ElementTable, button: RenderElement | null, runs: RenderElement[]) =>
+  runs.length ? <el.Box flexDirection="row" columnGap={1}>{button}{runs}</el.Box> : button
+
+const pictureCopies = (copy: CopyButton | undefined, second: RenderElement | null | undefined, grid: string | undefined, b: number, hues?: () => Hues) =>
+  second && copy && grid !== undefined ? { png: copy(grid, `png${b}`, '▣ png', 'png', hues), chafa: copy(grid, `chafa${b}`, '▣ chafa', 'chafa', hues) } : { png: null, chafa: null }
 export type Hues = Ink[][]
 export type Drawn = Map<number, { element?: RenderElement; art?: string; hues?: () => Hues; note?: string; scales?: boolean }>
 export type FoldLook = { label?: string; face?: (folded: boolean) => RenderElement }
@@ -1655,11 +1669,11 @@ export const renderBlocks = (el: ElementTable, style: Style, blocks: Block[], co
     const first = text === undefined || isPlainCode ? null : copy?.(text, `copy${b}`, copyLabel(style, block, art))
     const second = first && art !== undefined ? copy?.(art, `art${b}`, '⧉ art') : null
     const html = first && block.kind === 'table' ? copy?.(() => tableText(block), `html${b}`, '⧉ html', () => tableHtml(block, rtlTables[b])) : null
-    return { first, second, html, png: second && copy?.(grid!, `png${b}`, '▣ png', 'png', hues) }
+    return { first, second, html, ...pictureCopies(copy, second, grid, b, hues) }
   })
-  const codeHead = (label: string, button: RenderElement | null, shell: number) => {
+  const codeHead = (label: string, button: RenderElement | null, shell: number, more: RenderElement[] = []) => {
     if (!hover || !button) return null
-    const float = floating([button])
+    const float = floating(fitted([button, ...more]))
     return { ...float, minWidth: Math.min(columns, width(label) + 1 + float.needs + shell) }
   }
   const room = (b: number) => (hover && buttons[b]!.first ? columns - MARK : columns)
@@ -1690,15 +1704,16 @@ export const renderBlocks = (el: ElementTable, style: Style, blocks: Block[], co
         const gutter = numbered ? String(lines.length).length : 0
         const held = !style.nativeCode && mirrored(style) && lines.some(line => hasRtl(line) && (!opensLatin(line) || width(line) > room))
         const rows = [...(held ? heldCode(el, style, lines, shown, block.lang, gutter, room, key, block.isOpen) : codeRows(el, style, lines, shown, block.lang, numbered, room, key, block.isOpen, block.hrefs)), ...codeRest(el, lines.length, shown, key)]
+        const runs = chafaRun(copy, lines, b)
         const button = copy?.(lines.join('\n'), `copy${b}`) ?? null
         const label = codeLabel(block)
-        const head = codeHead(label, button, shell.width)
+        const head = codeHead(label, button, shell.width, runs)
         return (
           <Box key={key} flexDirection="column" alignSelf="flex-start" minWidth={head?.minWidth} {...shell.props}>
             {note ? <Text color={t.codeComment}>{note}</Text> : null}
             <Box flexDirection="row" justifyContent="space-between" columnGap={head ? 1 : 4}>
               <Text color={t.codeComment}>{label}</Text>
-              {head ? head.marker : button}
+              {head ? head.marker : withRuns(el, button, runs)}
             </Box>
             {codeBody(el, style, rows, gutter, held, toggle?.element ?? null)}
           </Box>
@@ -1719,7 +1734,7 @@ export const renderBlocks = (el: ElementTable, style: Style, blocks: Block[], co
   })
   const copied = rendered.map((element, b) => {
     const block = blocks[b]!
-    const { first, second, html, png } = buttons[b]!
+    const { first, second, html, png, chafa } = buttons[b]!
     if (!first) return element
     const { Box } = el
     const hebrew = style.reorder && hasRtl(block.raw)
@@ -1728,7 +1743,7 @@ export const renderBlocks = (el: ElementTable, style: Style, blocks: Block[], co
     if (hover) {
       const wide = rtl && (block.kind === 'list' || block.kind === 'quote' || block.kind === 'alert' || rtlTables[b])
       const start = !!wide && (!!rtlTables[b] || leadSide(style, block, room(b)) === 'R')
-      return markedRow(el, `c${b}`, element, floating(fitted([first, second, html, png]), opensWithCopy(block), start), start)
+      return markedRow(el, `c${b}`, element, floating(fitted([first, second, html, png, chafa]), opensWithCopy(block), start), start)
     }
     const button = second ? (
       <el.Box key={`copies${b}`} flexDirection="row" columnGap={1}>
@@ -1736,6 +1751,7 @@ export const renderBlocks = (el: ElementTable, style: Style, blocks: Block[], co
         {second}
         {html}
         {png}
+        {chafa}
       </el.Box>
     ) : first
     return (block.kind === 'quote' || block.kind === 'alert' || block.kind === 'heading') && !mirrored(style) ? (

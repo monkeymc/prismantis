@@ -31,7 +31,7 @@ for (const [backend, setup] of Object.entries(backends)) test(`${backend} copies
   const toasts = recordToasts(on)
   await startSession($, on)
   const ui = await $.ui.mount(mount)
-  expect((await ui.findAll({ type: 'Button' })).map(button => button.props.label).filter(label => label !== '⧉ copy reply')).toEqual(['⧉ md', '⧉ art', '⧉ html', ...(backend === 'macos' ? ['▣ png'] : [])])
+  expect((await ui.findAll({ type: 'Button' })).map(button => button.props.label).filter(label => label !== '⧉ copy reply')).toEqual(['⧉ md', '⧉ art', '⧉ html', ...(backend === 'macos' ? ['▣ png', '▣ chafa'] : [])])
   expect(calls).toHaveLength(0)
   await ui.press({ key: 'html0' })
   expect(calls).toHaveLength(1)
@@ -164,7 +164,7 @@ test('the HTML check runs once, on session start or on the first prompt after a 
   await $.prompt.submit({ text: 'again', wait: false, origin: { kind: 'composer' } })
   await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
   const after = await $.ui.mount(mount)
-  expect((await after.findAll({ type: 'Button' })).map(button => button.props.label).filter(label => label !== '⧉ copy reply')).toEqual(['⧉ md', '⧉ art', '⧉ html', '▣ png'])
+  expect((await after.findAll({ type: 'Button' })).map(button => button.props.label).filter(label => label !== '⧉ copy reply')).toEqual(['⧉ md', '⧉ art', '⧉ html', '▣ png', '▣ chafa'])
   expect(checks).toBe(1)
   await after.unmount()
 })
@@ -185,7 +185,7 @@ test('a table drawn before the HTML check lands gains ⧉ html when it lands', a
   expect(await labels()).toEqual(['⧉ md', '⧉ art'])
   release()
   await started
-  expect(await labels()).toEqual(['⧉ md', '⧉ art', '⧉ html', '▣ png'])
+  expect(await labels()).toEqual(['⧉ md', '⧉ art', '⧉ html', '▣ png', '▣ chafa'])
   await ui.unmount()
 })
 
